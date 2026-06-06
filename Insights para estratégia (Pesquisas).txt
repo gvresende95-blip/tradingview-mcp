@@ -1,0 +1,32 @@
+1. Z-Score do Open Interest (OI), Desvio de Preço e Aplicação
+Para calcular o Z-Score do OI em tempo real, você precisa capturar via WebSocket os snapshots de Open Interest total em intervalos de tempo fixos. O que serve para o mercado real é o Z-Score calculado sobre a variação percentual do OI, utilizando uma janela móvel curta (24 horas).
+
+Calcular o Z-Score sobre a taxa de variação (\(\Delta\% OI\)) isola anomalias de injeção de fluxo direcional abrupto no livro: \(Z=\frac{\Delta \%OI_{t}-\mu _{\text{rolling}}}{\sigma _{\text{rolling}}}\)
+
+Desvio de preço é a distorção percentual absoluta entre o preço do contrato perpétuo e o preço do índice Spot subjacente. Se o Desvio de Preço aumenta e Z-Score OI < 2.0, o livro vai corrigir a distorção sem alterar a taxa de financiamento futura de forma duradoura. Se o Desvio de Preço aumenta e Z-Score OI > 2.5, a distorção é sustentada por alavancagem e novas margens. Este cenário consolida a formação de taxas de financiamento altas que persistirão até o settlement.
+
+Aplicação prática OI:
+Ficar de Fora (Z < 2.0): O crescimento do OI está dentro da normalidade estatística.
+Gatilho de Entrada (Z >= 2.5): Alerta máximo de anomalia. Significa que novos contratos estão sendo abertos. Se o preço estiver subindo e o Predicted Funding estiver afundando para o campo negativo, há um estrangulamento de vendidos iminente.
+Tamanho da Posição: Se (Z > 3.5), o tamanho do lote deve ser reduzido, pois o risco de um gap de liquidez ou interrupção de negociação por volatilidade cresce exponencialmente. O tamanho ideal do lote é escalonado de forma inversamente proporcional ao desvio padrão. Se o Z-Score está entre 2.5 e 3.5 e o Premium Index cruzou a linha da TWAP em >1.5 desvios padrão, o preço vai continuar agredindo o livro na mesma direção até o settlement.
+
+OI subindo + preço subindo = Longs entrando
+OI subindo + preço descendo = Shorts entrando
+OI descendo + preço subindo = Shorts saindo
+OI descendo + preço subindo = Longs saindo
+
+2. Cálculo do Predicted Funding Rate, Descolamento e Desvio Padrão
+O Predicted Funding Rate é calculado com base no Premium Index (Preço Perpétuo - Preço Spot) e na Taxa de Juros da exchange. O executor institucional compara o Predicted Funding da tela com o Premium Index dos últimos minutos. Havendo descolamento >1.5 desvio padrão, o algoritmo monta a perna reversa para coletar o prêmio. Para encontrar o desvio padrão do descolamento, você calcula a volatilidade histórica da diferença entre o Premium Index e a TWAP do bloco em andamento.
+
+TWAP(Funding Tela) = Média Móvel Premium Index/Intervalo. Atualizado geralmente a cada minuto.
+
+O algoritmo analisa o descolamento (Predicted/Tela - Instantaneous/Index). O histórico passado de distorção fica matematicamente preso dentro da média das horas/minutos anteriores.
+
+3. Regras Gerais de Entrada - Depth/Liquidez, Slippage Dinâmico, Vol e OI
+A operação só é disparada se: Funding Net > (Taker Fee A + Taker Fee B + Slippage Book A + Slippage Book B)
+
+Estratégia 1 Funding + Spread - TWAP + OBI (Spread) + Vol/OI>3 + 0.1% (Posição) de +-0.2% preço atual (15 minutos antes do Settlement)
+Estratégia 2 Funding puro - Premium Index X Spot Index (1hr até horas antes do settlement)
+
+4. Pontos chave da pesquisa:
+Quando Z-score OI >=2 e Z-score Descolamento >1.5 = Boa oportunidade de entrada sem precisar esperar os últimos minutos ().
